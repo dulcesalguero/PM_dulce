@@ -1,0 +1,123 @@
+;**********************************
+; Contador hexadecimal en display 7 segmentos
+; con control por botones y Timer0 (100ms)
+; Microcontrolador: ATmega328P
+;**********************************
+
+.include "M328PDEF.inc"   ; Incluir definiciones del ATmega328P
+.cseg
+.org 0x0000
+
+;*************** DEFINICIONES ***************
+.def COUNTER = R20        ; Registro para almacenar el contador
+.def TEMP = R21           ; Registro temporal
+.def BTN_STATE = R22      ; Registro para guardar estado de botones
+
+;*************** CONFIGURACIÓN DE PILA ***************
+LDI R16, LOW(RAMEND)      ; Cargar la dirección baja de la RAM
+OUT SPL, R16              ; Configurar pila
+LDI R16, HIGH(RAMEND)     
+OUT SPH, R16              ; Configurar pila
+
+;*************** CONFIGURACIÓN MCU ***************
+SETUP:
+    ; Configurar prescaler para reducir F_CPU a 1MHz
+    LDI R16, (1 << CLKPCE) 
+    STS CLKPR, R16        ; Habilitar cambio de PRESCALER
+    LDI R16, 0b00000100   
+    STS CLKPR, R16        ; Configurar Prescaler a 16 (F_CPU = 1MHz)
+
+    ; Configurar Timer0 para generar un overflow cada 100ms
+    CALL INIT_TMR0        
+
+    ; Configurar PORTD como salida para display 7 segmentos
+    LDI R16, 0xFF         ; Todos los pines de PORTD como salida
+    OUT DDRD, R16
+
+    ; Configurar botones en PORTB (PB0 y PB1) con pull-ups activados
+    LDI R16, 0b00000011   ; PB0 y PB1 como entrada
+    OUT DDRB, R16         ; Configurar como entrada
+    LDI R16, 0b00000011   ; Habilitar pull-ups en PB0 y PB1
+    OUT PORTB, R16        
+
+    ; Inicializar variables
+    LDI COUNTER, 0x00      ; Inicializar contador en 0
+
+;*************** BUCLE PRINCIPAL ***************
+MAIN_LOOP:
+    CALL READ_BUTTONS      ; Leer botones
+    CALL DISPLAY_UPDATE    ; Actualizar display
+    RJMP MAIN_LOOP         ; Repetir bucle
+
+;*************** SUBRUTINAS ***************
+; Configurar Timer0
+INIT_TMR0:
+    LDI R16, (1 << CS01) | (1 << CS00) ; Prescaler de 64
+    OUT TCCR0B, R16       
+    LDI R16, 100          ; Cargar TCNT0 para overflow en 100ms
+    OUT TCNT0, R16        
+    RET
+
+; Leer botones con antirrebote
+READ_BUTTONS:
+    IN TEMP, PINB         ; Leer estado de los botones
+    MOV BTN_STATE, TEMP   ; Guardar estado actual
+    
+    SBIC BTN_STATE, 0     ; Si PB0 está en HIGH (botón NO presionado), saltar
+    RJMP BTN_DOWN_1
+    SBIC BTN_STATE, 1     ; Si PB1 está en HIGH (botón NO presionado), saltar
+    RJMP BTN_DOWN_2
+    RET                   ; No se presionó ningún botón, regresar
+
+BTN_DOWN_1:
+    INC COUNTER           ; Incrementar contador
+    CPI COUNTER, 0x10     ; Si es mayor a 0xF, reiniciar a 0
+    BRNE NO_RESET_1
+    CLR COUNTER
+NO_RESET_1:
+    CALL WAIT_ANTIRREBOTE
+    RET
+
+BTN_DOWN_2:
+    DEC COUNTER           ; Decrementar contador
+    BRPL NO_RESET_2       ; Si es negativo, reiniciar a 0xF
+    LDI COUNTER, 0x0F
+NO_RESET_2:
+    CALL WAIT_ANTIRREBOTE
+    RET
+
+; Pequeña pausa para antirrebote (simple)
+WAIT_ANTIRREBOTE:
+    LDI R16, 10
+DELAY_LOOP:
+    NOP
+    DEC R16
+    BRNE DELAY_LOOP
+    RET
+
+; Actualizar display de 7 segmentos
+DISPLAY_UPDATE:
+    MOV ZL, COUNTER       ; Usar Z como índice de la tabla
+    LDI ZH, HIGH(TABLE)   ; Dirección alta de la tabla
+    LPM R16, Z            ; Leer valor de la tabla
+    OUT PORTD, R16        ; Enviar a PORTD para mostrar en el display
+    RET
+
+;*************** TABLA DE BÚSQUEDA ***************
+TABLE:
+    .DB 0x3F  ; "0"
+    .DB 0x06  ; "1"
+    .DB 0x5B  ; "2"
+    .DB 0x4F  ; "3"
+    .DB 0x66  ; "4"
+    .DB 0x6D  ; "5"
+    .DB 0x7D  ; "6"
+    .DB 0x07  ; "7"
+    .DB 0x7F  ; "8"
+    .DB 0x6F  ; "9"
+    .DB 0x77  ; "A"
+    .DB 0x7C  ; "B"
+    .DB 0x39  ; "C"
+    .DB 0x5E  ; "D"
+    .DB 0x79  ; "E"
+    .DB 0x71  ; "F"
