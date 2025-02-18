@@ -1,0 +1,62 @@
+// PRE LABORATORIO 3
+/// contador de bits que incrementa o decrementa con dos pushbuttons
+// PRUEBA 
+;
+; Pre Lab 3.asm
+; Interrupciones
+; Autor: Dulce Salguero - 231208
+; Programación de Microcontroladores - 10 
+
+.INCLUDE "m328Pdef.inc"  ; Incluir definiciones para ATmega328P
+
+.CSEG
+.ORG 0x00
+    RJMP MAIN  ; Salto al inicio del programa
+
+.ORG PCINT1addr  ; Dirección de la interrupción por cambio de pines en PCINT1
+    RJMP ISR_PCINT  ; Salto a la rutina de interrupción
+
+MAIN:
+    ; Configurar PC2 y PC3 como entradas
+    CBI DDRC, PC2  ; Configurar PC2 como entrada
+    CBI DDRC, PC3  ; Configurar PC3 como entrada
+    SBI PORTC, PC2 ; Habilitar pull-up interno en PC2
+    SBI PORTC, PC3 ; Habilitar pull-up interno en PC3
+
+    ; Configurar PCMSK1 para habilitar interrupciones en PC2 y PC3 (PCINT10 y PCINT11)
+    LDI R16, (1 << PCINT10) | (1 << PCINT11)
+    STS PCMSK1, R16
+
+    ; Habilitar interrupciones por cambio de pines en PORTC (PCINT1)
+    LDI R16, (1 << PCIE1)
+    STS PCICR, R16
+
+    SEI  ; Habilitar interrupciones globales
+
+LOOP:
+    RJMP LOOP  ; Bucle infinito
+
+ISR_PCINT:
+    PUSH R16  ; Guardar R16
+    IN R16, PINC  ; Leer el estado de los pines de entrada
+
+    SBIC PINC, PC2  ; Si PC2 está presionado (botón 1)
+    RJMP INCREMENTAR  ; Llamar función de incremento
+
+    SBIC PINC, PC3  ; Si PC3 está presionado (botón 2)
+    RJMP DECREMENTAR  ; Llamar función de decremento
+
+    POP R16  ; Restaurar R16
+    RETI  ; Retornar de la interrupción
+
+INCREMENTAR:
+    ; Aquí iría la lógica para incrementar el contador de 4 bits
+    RJMP FIN_ISR
+
+DECREMENTAR:
+    ; Aquí iría la lógica para decrementar el contador de 4 bits
+    RJMP FIN_ISR
+
+FIN_ISR:
+    POP R16
+    RETI
