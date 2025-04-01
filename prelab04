@@ -1,0 +1,107 @@
+/*
+* Prelab04.c
+ * Universidad del Valle de Guatemala 
+ * Progra de Micros 
+ * PRE LAB 04 - ADC - 10
+ * Author : dulce
+ */ 
+
+// Encabezado (Libraries)
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+// Variables globales
+volatile uint8_t counter = 0;         // Contador de 8 bits
+volatile uint8_t counter_10ms = 0;    // Contador para antirrebote
+volatile uint8_t button_up_pressed = 0;
+volatile uint8_t button_down_pressed = 0;
+
+/****************************************/
+// Function prototypes
+void setup();
+void update_leds();
+
+/****************************************/
+// Main Function
+int main(void)
+{
+    setup(); // Configuración inicial
+    
+    while (1) 
+    {
+        // El procesamiento principal se hace en las interrupciones
+    }
+}
+
+/****************************************/
+// NON-Interrupt subroutines
+void setup()
+{
+    // Configurar PORTD como salida para los LEDs
+    DDRD = 0xFF;    // Todos los pines como salida
+    PORTD = 0x00;   // Inicialmente apagados
+    
+    // Configurar PC0 y PC1 como entradas con pull-up
+    DDRC &= ~((1 << PC0) | (1 << PC1)); // Pines como entrada
+    PORTC |= (1 << PC0) | (1 << PC1);   // Activar pull-ups
+    
+    // Configurar Timer0 para antirrebote (10ms)
+    TCCR0A = 0x00;  // Modo normal
+    TCCR0B = (1 << CS02) | (1 << CS00); // Prescaler 1024
+    TIMSK0 = (1 << TOIE0); // Habilitar interrupción por overflow
+    
+    // Habilitar interrupciones globales
+    sei();
+    
+    // Mostrar valor inicial
+    update_leds();
+}
+
+// Actualiza los LEDs según el valor del contador
+void update_leds()
+{
+    PORTD = counter;
+}
+
+/****************************************/
+// Interrupt routines
+
+ISR(TIMER0_OVF_vect)
+{
+    // Este timer se desborda aproximadamente cada 10ms (con F_CPU=16MHz)
+    // 256 ticks * 1024 prescaler / 16MHz = 16.384ms
+    
+    // Leer estado de los botones
+    uint8_t up_state = !(PINC & (1 << PC0)); // 0 si no presionado, 1 si presionado
+    uint8_t down_state = !(PINC & (1 << PC1));
+    
+    // Lógica de antirrebote para botón de incremento
+    if (up_state && !button_up_pressed) {
+        counter_10ms++;
+        if (counter_10ms >= 3) { // 30ms de debounce
+            counter++;
+            update_leds();
+            button_up_pressed = 1;
+            counter_10ms = 0;
+        }
+    } 
+    else if (!up_state) {
+        button_up_pressed = 0;
+        counter_10ms = 0;
+    }
+    
+    // Lógica de antirrebote para botón de decremento
+    if (down_state && !button_down_pressed) {
+        counter_10ms++;
+        if (counter_10ms >= 3) { // 30ms de debounce
+            counter--;
+            update_leds();
+            button_down_pressed = 1;
+            counter_10ms = 0;
+        }
+    } 
+    else if (!down_state) {
+        button_down_pressed = 0;
+        counter_10ms = 0;
+    }
+}
