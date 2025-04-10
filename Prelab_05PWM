@@ -1,11 +1,8 @@
-////////////// PRE LAB  - PWM ////////////////
-
-///// MAIN ///////
 ///// PRELAB 05 - PWM /////
 /// Universidad del Valle de Guatemala 
 /// Dulce Salguero - 231208
 //// PM - 10
-
+#define F_CPU 16000000
 #include <avr/io.h>
 #include <util/delay.h>
 #include "PWMServo.h"
@@ -27,14 +24,12 @@ int main(void) {
 
 	while (1) {
 		uint16_t adc = ADC_read(); // 0 - 1023
-		uint8_t angle = adc * 180UL / 1023; // Mapear a 0-180 grados
+		uint16_t angle = (adc * 3500.0/1023.0) + 1000; // Mapear a 0-180 grados
 		PWM_setAngle(angle);
-		_delay_ms(100);
+		_delay_ms(10);
 	}
 }
 
-
-////////// C FILE ////////
 #include "PWMServo.h"
 
 void PWM_init() {
@@ -46,19 +41,19 @@ void PWM_init() {
 	DDRB |= (1 << PB1); // OC1A (D9) como salida
 }
 
-void PWM_setAngle(uint8_t angle) {
+void PWM_setAngle(uint16_t angle) {
 	// Mapear 0-180° a 1-2 ms → 2000 a 4000 ticks (0.5 us cada tick)
-	uint16_t ticks = 2000 + (angle * 11); // 11 = (2000/180)
-	OCR1A = ticks;
+	//uint16_t ticks = 2000 + (angle * 11); // 11 = (2000/180)
+	//OCR1A = ticks;
+	OCR1A = angle; 
 }
 
-/////////// HEADER ////////////// 
 #ifndef PWMSERVO_H
 #define PWMSERVO_H
 
 #include <avr/io.h>
 
 void PWM_init();
-void PWM_setAngle(uint8_t angle);
+void PWM_setAngle(uint16_t angle);
 
 #endif
