@@ -4,6 +4,15 @@
  * Progra de micros - 10
  * Autora: Dulce Salguero 
  * espero sirva yeii
+ * SI SIRVEEEEEEEEEEE :)
+*/
+
+/////// MAINNN //// 
+/*
+ * LABORATORIO  05 - PWM servosss y LED 
+ * Progra de micros - 10
+ * Autora: Dulce Salguero 
+ * espero sirva yeii
 */
 
 #define F_CPU 16000000
@@ -11,23 +20,42 @@
 #include <util/delay.h>
 #include "motorcito1.h"
 #include "motorcito2.h"
+#include "LEEDDD.h"
 
 volatile uint8_t mux_state = 0;
 volatile  state = 0;
 
 void ADC_init() {
 	ADMUX = 0;
-	ADMUX = (1 << REFS0); // Poner los 5V como referencia
-	ADMUX	|= (1 << MUX2) | (1<< MUX1); //Seleccionar el ADC6
-	ADCSRA = (1 << ADEN) | (1 << ADPS1) | (1 << ADPS0); // velodidad de muestreo de factor de division de 8
+	ADMUX = (1 << REFS0); 
+	ADMUX	|= (1 << MUX2) | (1<< MUX1); 
+	ADCSRA = (1 << ADEN) | (1 << ADPS1) | (1 << ADPS0); 
 }
 
-void ADC_init2() {  // correcto
+void ADC_init2() {  
 	ADMUX = 0;
-	ADMUX = (1 << REFS0); // Poner los 5V como referencia (AVcc)
-	ADMUX |= (1 << MUX1) | (1 << MUX0); // Seleccionar el ADC3 (PC3)
-	ADCSRA = (1 << ADEN) | (1 << ADPS1) | (1 << ADPS0); //  velocidad de muestreo de 8
+	ADMUX = (1 << REFS0); 
+	ADMUX |= (1 << MUX1) | (1 << MUX0); 
+	ADCSRA = (1 << ADEN) | (1 << ADPS1) | (1 << ADPS0); 
 	
+}
+
+void ADC_init3() {
+	ADMUX = 0;
+	ADMUX = (1 << REFS0);
+	ADMUX |= (1 << MUX1); // ADC2 (A2)
+	ADCSRA = (1 << ADEN) | (1 << ADPS1) | (1 << ADPS0);
+}
+
+uint16_t read_ADC_average(uint8_t channel) {
+	uint32_t total = 0;
+	for (uint8_t i = 0; i < 10; i++) {
+		ADMUX = (ADMUX & 0xF0) | (channel & 0x0F);
+		ADCSRA |= (1 << ADSC);
+		while (ADCSRA & (1 << ADSC));
+		total += ADC;
+	}
+	return (uint16_t)(total / 10);
 }
 
 uint16_t ADC_read() {
@@ -39,7 +67,9 @@ uint16_t ADC_read() {
 
 
 int main(void) {
-
+	
+	PWM_manual_init();
+	
 	while (1) {
 		//servo 1
 		ADC_init();
@@ -48,6 +78,7 @@ int main(void) {
 		uint16_t angle = (adc * 3500.0/1023.0) + 1000; // Mapear a 0-180 grados
 		PWM_setAngle(angle);
 		_delay_ms(10);
+		
 		//servo 2
 		ADC_init2();
 		PWM_init2();
@@ -55,12 +86,20 @@ int main(void) {
 		uint16_t duty = (adcarry * 180.0/1023.0); // Mapear a 0-180 grados
 		PWM_setDuty2(duty);
 		_delay_ms(10);
+		
+		//led
+		ADC_init3();
+		uint16_t adcled_avg = read_ADC_average(2); // A2
+		uint8_t brillo = (adcled_avg * 100UL) / 1023;
+		PWM_manual_set(brillo);
+
+
 	}
 }
 
+/********************** LIBRERÍAS UTILIZADAS **************************************/
 
-
-/***** .c MOTORCITO 1 ****/
+/* .c MOTORCITO 1 
 /*
  * motorcito1.c
  *  Author: dulce
@@ -81,8 +120,7 @@ void PWM_setAngle(uint16_t angle) {
 	OCR1A = angle;
 }
 
-
-/*********.h MOTORCITO 1 *****/
+/* .h MOTORCITO 1
 /*
  * motorcito1.h
  *  Author: dulce
@@ -99,7 +137,7 @@ void PWM_setAngle(uint16_t angle);
 
 #endif /* MOTORCITO1_H_ */
 
-/****.c MOTORCITO 2 ***/
+/* .c MOTORCITO 2
 /*
  * motorcito2.c
  *  Author: dulce
@@ -120,7 +158,7 @@ void PWM_setDuty2(uint8_t duty) {
 	OCR2B = duty;
 }
 
-/*****.h MOTORCITO 2 ****/
+/* .h MOTORCITO 2
 /*
  * motorcito2.h
  *  Author: dulce
@@ -136,3 +174,61 @@ void PWM_init2();
 void PWM_setAngle2(uint16_t duty);
 
 #endif /* MOTORCITO2_H_ */
+
+/* .c LED 
+/*
+ * LEEDDD.c
+ *  Author: dulce
+ */ 
+
+#include "LEEDDD.h"
+#include <avr/interrupt.h>
+
+volatile uint8_t setpoint = 0;
+volatile uint8_t count = 0;
+
+void PWM_manual_init() {
+	DDRD |= (1 << PD6); // D6 como salida
+
+	TCCR0A = (1 << WGM01); // Modo CTC
+	TCCR0B = (1 << CS01) | (1 << CS00); // Prescaler 64
+	OCR0A = 25; // 25 ticks = 0.1 ms → 100 Hz PWM con count hasta 100
+
+	TIMSK0 |= (1 << OCIE0A); // Habilita interrupción
+	sei();
+}
+
+void PWM_manual_set(uint8_t value) {
+	if (value > 100) value = 100;
+	setpoint = value;
+}
+
+ISR(TIMER0_COMPA_vect) {
+	if (count < setpoint) {
+		PORTD |= (1 << PD6); // LED ON
+		} else {
+		PORTD &= ~(1 << PD6); // LED OFF
+	}
+
+	count++;
+	if (count >= 100) count = 0;
+}
+
+/* .h LED
+/*
+ * LEEDDD.h
+ *
+ * Created: 4/20/2025 10:58:10 PM
+ *  Author: dulce
+ */ 
+
+
+#ifndef LEEDDD_H_
+#define LEEDDD_H_
+
+#include <avr/io.h>
+
+void PWM_manual_init();
+void PWM_manual_set(uint8_t value);
+
+#endif /* LEEDDD_H_ */
