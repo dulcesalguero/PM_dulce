@@ -1,0 +1,138 @@
+////////// LABCITO 05 con motores servos //////
+/*
+ * LABORATORIO  05 - PWM servosss y LED 
+ * Progra de micros - 10
+ * Autora: Dulce Salguero 
+ * espero sirva yeii
+*/
+
+#define F_CPU 16000000
+#include <avr/io.h>
+#include <util/delay.h>
+#include "motorcito1.h"
+#include "motorcito2.h"
+
+volatile uint8_t mux_state = 0;
+volatile  state = 0;
+
+void ADC_init() {
+	ADMUX = 0;
+	ADMUX = (1 << REFS0); // Poner los 5V como referencia
+	ADMUX	|= (1 << MUX2) | (1<< MUX1); //Seleccionar el ADC6
+	ADCSRA = (1 << ADEN) | (1 << ADPS1) | (1 << ADPS0); // velodidad de muestreo de factor de division de 8
+}
+
+void ADC_init2() {  // correcto
+	ADMUX = 0;
+	ADMUX = (1 << REFS0); // Poner los 5V como referencia (AVcc)
+	ADMUX |= (1 << MUX1) | (1 << MUX0); // Seleccionar el ADC3 (PC3)
+	ADCSRA = (1 << ADEN) | (1 << ADPS1) | (1 << ADPS0); //  velocidad de muestreo de 8
+	
+}
+
+uint16_t ADC_read() {
+	ADCSRA |= (1 << ADSC); // Iniciar conversión
+	while (ADCSRA & (1 << ADSC)); // Esperar a que termine
+	return ADC; // Leer el resultado
+}
+
+
+
+int main(void) {
+
+	while (1) {
+		//servo 1
+		ADC_init();
+		PWM_init();
+		uint16_t adc = ADC_read(); // 0 - 1023
+		uint16_t angle = (adc * 3500.0/1023.0) + 1000; // Mapear a 0-180 grados
+		PWM_setAngle(angle);
+		_delay_ms(10);
+		//servo 2
+		ADC_init2();
+		PWM_init2();
+		uint16_t adcarry = ADC_read(); // 0 - 1023
+		uint16_t duty = (adcarry * 180.0/1023.0); // Mapear a 0-180 grados
+		PWM_setDuty2(duty);
+		_delay_ms(10);
+	}
+}
+
+
+
+/***** .c MOTORCITO 1 ****/
+/*
+ * motorcito1.c
+ *  Author: dulce
+ */ 
+
+#include "motorcito1.h"
+
+void PWM_init() {
+	// Fast PWM, modo 14: TOP = ICR1
+	TCCR1A = (1 << COM1A1) | (1 << WGM11);
+	TCCR1B = (1 << WGM13) | (1 << WGM12) | (1 << CS11); // prescaler 8
+
+	ICR1 = 40000; // TOP = 20 ms con reloj de 16MHz y prescaler 8
+	DDRB |= (1 << PORTB1) ; // OC1A (D9) como salida
+}
+
+void PWM_setAngle(uint16_t angle) {
+	OCR1A = angle;
+}
+
+
+/*********.h MOTORCITO 1 *****/
+/*
+ * motorcito1.h
+ *  Author: dulce
+ */ 
+
+
+#ifndef MOTORCITO1_H_
+#define MOTORCITO1_H_
+
+#include <avr/io.h>
+
+void PWM_init();
+void PWM_setAngle(uint16_t angle);
+
+#endif /* MOTORCITO1_H_ */
+
+/****.c MOTORCITO 2 ***/
+/*
+ * motorcito2.c
+ *  Author: dulce
+ */ 
+
+#include "motorcito2.h"
+
+void PWM_init2() {
+	// Configurar Timer2 para modo Phase Correct PWM con TOP=0xFF
+	TCCR2A = (1 << COM2B1) | (1 << WGM20); // Non-inverting, Phase Correct PWM
+	TCCR2B = (1 << CS22); // Prescaler de 64 (ajustar según necesidades)
+	
+	DDRD |= (1 << PORTD3); // OC2B (PD3) como salida
+}
+
+void PWM_setDuty2(uint8_t duty) {
+	// Mapear ángulo (0-180) a ancho de pulso (ej. 5-25 para 50Hz)
+	OCR2B = duty;
+}
+
+/*****.h MOTORCITO 2 ****/
+/*
+ * motorcito2.h
+ *  Author: dulce
+ */ 
+
+
+#ifndef MOTORCITO2_H_
+#define MOTORCITO2_H_
+
+#include <avr/io.h>
+
+void PWM_init2();
+void PWM_setAngle2(uint16_t duty);
+
+#endif /* MOTORCITO2_H_ */
