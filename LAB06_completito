@@ -1,0 +1,154 @@
+/*** SI FUNCIONA YEIII :) *//
+/* Universidad del Valle de Guatemala 
+ * LAB06_completo.c
+ * Progra de Micros - 10
+ * Laboratorio UART: completo ;) SI SIRVE 
+ * Author : Dulce Salguero - 231208
+ */ 
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+/****************************************/
+// Function prototypes
+void setup();
+void initUART();
+void writeChar(char caracter);
+void writeString(char* texto);
+void mostrarMenu();
+void initADC();
+uint8_t leerADC(uint8_t canal);
+void mostrarValor(uint8_t valor);
+
+/****************************************/
+// Global variables
+volatile char received_char;
+volatile uint8_t new_data = 0;
+volatile uint8_t ascii_mode = 0;
+
+/****************************************/
+// Main Function
+int main(void) {
+    setup();
+    mostrarMenu();
+    
+    while (1) {
+        if (new_data) {
+            new_data = 0;
+            
+            if (ascii_mode == 0) { // Modo menú
+                if (received_char == '1') { // Leer potenciómetro
+                    uint8_t valor = leerADC(0); // Canal A0
+                    
+                    // Mostrar en LEDs
+                    PORTB = valor & 0x1F; // bits 0-4 a PORTB
+                    PORTD = (PORTD & 0x1F) | (valor & 0xE0); // bits 5-7 a PD5-PD7
+                    
+                    // Mostrar en terminal
+                    writeString("\nValor del potenciómetro (0-255): ");
+                    mostrarValor(valor);
+                    writeString("\n");
+                    
+                    mostrarMenu();
+                } 
+                else if (received_char == '2') { // Enviar ASCII
+                    writeString("\nIngrese un caracter ASCII: ");
+                    ascii_mode = 1;
+                    new_data = 0; // Esperar nuevo caracter
+                } 
+                else { // Opción inválida
+                    writeString("\nOpcion invalida.\n");
+                    mostrarMenu();
+                }
+            } 
+            else if (ascii_mode == 1) { // Modo ASCII
+                // Mostrar en LEDs
+                PORTB = received_char & 0x1F; // bits 0-4 a PORTB
+                PORTD = (PORTD & 0x1F) | ((received_char & 0xE0) >> 3); // bits 5-7 a PD5-PD7
+                
+                writeString("\nCaracter recibido: ");
+                writeChar(received_char);
+                writeString("\n");
+                
+                ascii_mode = 0; // Volver al menú
+                mostrarMenu();
+            }
+        }
+    }
+}
+
+/****************************************/
+// NON-Interrupt subroutines
+void setup() {
+    cli(); // Deshabilitar interrupciones
+    
+    // Configurar LEDs
+    DDRB |= 0x1F; // PB0-PB4 como salida
+    DDRD |= (1 << DDD5) | (1 << DDD6) | (1 << DDD7); // PD5-PD7 como salida
+    
+    PORTB = 0x00; // Apagar LEDs
+    PORTD &= ~((1 << PORTD5) | (1 << PORTD6) | (1 << PORTD7)); // Apagar LEDs
+    
+    initUART(); // UART
+    initADC();  // ADC
+    
+    sei(); // Habilitar interrupciones
+}
+
+void initUART() {
+    DDRD |= (1 << DDD1); // TX salida
+    DDRD &= ~(1 << DDD0); // RX entrada
+    
+    UCSR0A = 0;
+    UCSR0B = (1 << RXCIE0) | (1 << RXEN0) | (1 << TXEN0); 
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); 
+    UBRR0 = 103; // 9600 baudios @16MHz
+}
+
+void writeChar(char caracter) {
+    while (!(UCSR0A & (1 << UDRE0)));
+    UDR0 = caracter;
+}
+
+void writeString(char* texto) {
+    for (uint8_t i = 0; texto[i] != '\0'; i++) {
+        writeChar(texto[i]);
+    }
+}
+
+void mostrarMenu() {
+    writeString("\n----- MENU -----\n");
+    writeString("1. Leer Potenciometro\n");
+    writeString("2. Enviar Ascii\n");
+    writeString("Seleccione una opcion: ");
+}
+
+void initADC() {
+    ADMUX = (1 << REFS0); // Referencia AVcc
+    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // Habilitar ADC, preescalador 128
+}
+
+uint8_t leerADC(uint8_t canal) {
+    ADMUX = (ADMUX & 0xF0) | (canal & 0x0F); // Seleccionar canal
+    ADCSRA |= (1 << ADSC); // Iniciar conversión
+    while (ADCSRA & (1 << ADSC));
+    return ADC >> 2; // Convertir a 8 bits
+}
+
+
+void mostrarValor(uint8_t valor) {
+    if (valor >= 100) {
+        writeChar('0' + (valor / 100));
+    }
+    if (valor >= 10) {
+        writeChar('0' + ((valor / 10) % 10));
+    }
+    writeChar('0' + (valor % 10));
+}
+
+/****************************************/
+// Interrupt routines
+ISR(USART_RX_vect) {
+    received_char = UDR0;
+    new_data = 1;
+}
