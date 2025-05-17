@@ -1,0 +1,53 @@
+//////* Prueba 45° */////////////
+
+#define F_CPU 16000000
+#include <avr/io.h>
+#include <util/delay.h>
+#include "servo4.h"
+
+void ADC_init() {
+	ADMUX = (1 << REFS0); // Referencia AVcc, canal ADC0
+	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // Prescaler 128
+}
+
+uint16_t ADC_read() {
+	ADCSRA |= (1 << ADSC); // Iniciar conversión
+	while (ADCSRA & (1 << ADSC)); // Esperar a que termine
+	return ADC; // Leer resultado
+}
+
+int main(void) {
+	ADC_init();
+	PWM_init();
+
+	while (1) {
+		uint16_t adc = ADC_read(); // Lectura de 0 a 1023
+		uint16_t ticks = (adc * 500UL / 1023UL) + 3000; // Mapeo a 3000–3500 ticks
+		PWM_setAngle(ticks);
+		_delay_ms(10);
+	}
+}
+
+
+
+.h
+#include <avr/io.h>
+
+void PWM_init();
+void PWM_setAngle(uint16_t angle);
+
+.c
+#include "servo4.h"
+
+void PWM_init() {
+	// Fast PWM, modo 14: TOP = ICR1
+	TCCR1A = (1 << COM1A1) | (1 << WGM11);
+	TCCR1B = (1 << WGM13) | (1 << WGM12) | (1 << CS11); // prescaler 8
+
+	ICR1 = 40000; // TOP = 20 ms con reloj de 16MHz y prescaler 8
+	DDRB |= (1 << PB1); // OC1A (D9) como salida
+}
+
+void PWM_setAngle(uint16_t angle) {
+	OCR1A = angle;
+}
