@@ -10,20 +10,24 @@
  *  - Potenciómetro: A0
  *  - Botón  D2  (cambio de modo)
  *  - LED   D13  (indica el modo actual)
-
-* SIRVEN LOS SERVOS --  MODO MANUAL: CHECKKK --- FORMATO DE MODOS: CHECKKK (comienza con modo manual ¡REVISAR LÓGICA DE LED!!))
+ *
  */
+
 
 #define F_CPU 16000000
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
 
-// Definición de modos 
+//LLamada de librerias internas
+#include "EPROM.h"
+#include "UART.h"
+
+// Definición de modos
 typedef enum {
-    MODO_FISICO,
-    MODO_EPROM,
-    MODO_SERIAL
+	MODO_FISICO,
+	MODO_EPROM,
+	MODO_SERIAL
 } ModoOperacion;
 
 volatile ModoOperacion modo_actual = MODO_FISICO; // Inicia en modo físico
@@ -32,145 +36,236 @@ volatile ModoOperacion modo_actual = MODO_FISICO; // Inicia en modo físico
 void setup();
 void initADC();
 uint16_t leerADC(uint8_t canal);
-void initPWM();
+void PWM_init();
+void PWM_init0();
+void PWM_init2();
+void PWM_setAngle(uint16_t angle);
+void PWM_setAngle2(uint16_t mov);
+void PWM_setAngle3(uint16_t tung);
+void PWM_setAngle4(uint16_t cerati);
+void PWM_setAngle5(uint16_t angle5);
+void PWM_setAngle6(uint16_t angle6);
 uint8_t boton_presionado();
 void cambiar_modo();
+uint8_t escribir = 0;
+uint8_t direccion = 0;
+uint8_t paqueton = 0;
 
-// --- FUNCIONES DE MAPEO ---
+volatile char received_char;
+volatile uint8_t new_data = 0;
+
+
+
+int main(void)
+{
+	setup();
+	initADC();
+	PWM_init();
+	PWM_init2();
+	PWM_init0();
+	
+    while (1) 
+    {
+		//EJE X  --- ADC 6
+		// EJE Y --- ADC 7 
+		cambiar_modo();
+		
+		switch(modo_actual){
+			case MODO_FISICO:
+			{  
+				uint16_t servo1 = leerADC(6);
+				uint16_t angle = (servo1 * -1.96) + 2100.0;
+				PWM_setAngle(angle);
+				
+				uint16_t servo2 = leerADC(6);
+				uint16_t mov = (servo2 * 1.96) + 1199.0;
+				PWM_setAngle2(mov);
+				
+				uint16_t lol = leerADC(6);
+				uint16_t tung = (lol * 0.0137) + 9;
+				PWM_setAngle3(tung);
+				
+				uint16_t caifanes = leerADC(7);
+				uint16_t cerati = (caifanes * 0.00684) + 9;
+				PWM_setAngle4(cerati);
+				
+				uint16_t cejas = leerADC(0);
+				uint16_t angle5 = (cejas * 0.0039) + 9;
+				PWM_setAngle5(angle5);
+				
+				uint16_t cejas2 = leerADC(0);
+				uint16_t angle6 = (cejas2 * -0.0039) + 13;
+				PWM_setAngle6(angle6);
+				
+				if(escribir == 1 && paqueton <=5)
+				{
+					//servo 1
+					writeEEPROM(OCR1A, direccion++);
+					//servo 2
+					writeEEPROM(OCR1B, direccion++);
+					//servo 3
+					writeEEPROM(OCR2A, direccion++);
+					//servo 4
+					writeEEPROM(OCR2B, direccion++);
+					//servo 5
+					writeEEPROM(OCR0A, direccion++);
+					//servo 6
+					writeEEPROM(OCR0B, direccion++);
+					paqueton++;
+					escribir = 0;
+				}
+				
+				
+				break;  
+			}
+			case MODO_EPROM:
+			
+			if (escribir >= 1 && escribir <= 4){
+				
+				uint8_t paquetito = (escribir - 1)* 6;
+				
+				OCR1A = readEEPROM( paquetito);
+				OCR1B = readEEPROM(paquetito + 1);
+				OCR2A = readEEPROM(paquetito + 2);
+				OCR2B = readEEPROM(paquetito + 3);
+				OCR0A = readEEPROM(paquetito + 4);
+				OCR0B = readEEPROM(paquetito + 5);
+				
+			}
+			
+			break;
+			case MODO_SERIAL:
+			
+			break;
+		}
+	}
+}
+//subrutinas
+
+void initADC(){
+	ADMUX = (1 << REFS0); // Referencia AVcc
+	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // Habilitar ADC, preescalador 128
+}
+
+void setup()
+{
+	cli();
+	DDRC = 0x00;
+	DDRB = 0xFF;
+	DDRD = 0xFF;
+	DDRD |= (1 << PORTD2) |(1 << PORTD7) ;  // D2 como entrada
+	PORTD |= (1 << PORTD2) | (1 << PORTD7);
+	
+
+	
+	// PIN CHANGE EN D7
+	PCMSK2 |= (1 << PIND7);
+	PCICR |= (1 << PCIE2);
+	
+	initUART();	
+	sei();
+	
+}
+
+
+uint16_t leerADC(uint8_t canal) {
+	ADMUX = (ADMUX & 0xF0) | (canal & 0x0F); // Seleccionar canal
+	ADCSRA |= (1 << ADSC); // Iniciar conversión
+	while (ADCSRA & (1 << ADSC));
+	return ADC; //
+}
+
+
+void PWM_init() {
+	// Fast PWM, modo 14: TOP = ICR1
+	TCCR1A |= (1 << COM1A1) | (1 << WGM11) | (1 << COM1B1);
+	TCCR1B |= (1 << WGM13) | (1 << WGM12) | (1 << CS11); // prescaler 8
+
+	ICR1 = 65000; // TOP = 20 ms con reloj de 16MHz y prescaler 8
+	
+	DDRB |= (1 << PORTB1) | (1 << PORTB2); // OC1A (D9) como salida
+}
+
+void PWM_init2() {
+	// Configurar Timer2 para modo FASAT PWM PWM con TOP=0xFF
+	TCCR2A |= (1 << COM2A1) | (1 << COM2B1) | (1 << WGM20) | (1 << WGM21); // Non-inverting en ambos canales
+	TCCR2B |= (1 << CS22) | (1 << CS21) | (1 << CS20); // Prescaler de 1024 (ajustar según necesidades)
+
+	DDRD |= (1 << PORTD3); // OC2B (PD3) como salida
+	DDRB |= (1 << PORTB3);  // OC2A (PB3) como salida (en la mayoría de los ATmega)
+}
+
+
+void PWM_init0() {
+	// Configurar Timer2 para modo FAST PWM top 0xFF
+	TCCR0A |= (1 << COM0A1) | (1 << COM0B1) | (1 << WGM00) | (1 << WGM01); // Non-inverting en ambos canales
+	TCCR0B |= (1 << CS02)  | (1 << CS00); // Prescaler de 1024 (ajustar según necesidades)
+
+	DDRD |= (1 << PORTD6); // OC0A
+	DDRD |= (1 << PORTD5);  // OC0B
+}
+
 void PWM_setAngle(uint16_t angle) {
-    OCR1A = angle;
+	OCR1A = angle;
 }
 void PWM_setAngle2(uint16_t mov) {
-    OCR1B = mov;
+	OCR1B = mov;
 }
 void PWM_setAngle3(uint16_t tung) {
-    OCR2A = tung;
+	OCR2A = tung;
 }
 void PWM_setAngle4(uint16_t cerati) {
-    OCR2B = cerati;
+	OCR2B = cerati;
 }
 void PWM_setAngle5(uint16_t angle5) {
-    OCR0A = angle5;
+	OCR0A = angle5;
 }
 void PWM_setAngle6(uint16_t angle6) {
-    OCR0B = angle6;
+	OCR0B = angle6;
 }
 
-int main(void) {
-    setup();
-    initADC();
-    initPWM();
-    
-    while(1) {
-        cambiar_modo(); // Control del cambio de modo
-        
-        switch(modo_actual) {
-            case MODO_FISICO: {
-        
-                uint16_t servo1 = leerADC(6);
-                uint16_t angle = (servo1 * -1.96) + 2100.0;
-                PWM_setAngle(angle);
-                
-                uint16_t servo2 = leerADC(6);
-                uint16_t mov = (servo2 * 1.96) + 1199.0;
-                PWM_setAngle2(mov);
-                
-                uint16_t lol = leerADC(6);
-                uint16_t tung = (lol * 0.0137) + 9;
-                PWM_setAngle3(tung);
-                
-                uint16_t caifanes = leerADC(7);
-                uint16_t cerati = (caifanes * 0.00684) + 9;
-                PWM_setAngle4(cerati);
-                
-                uint16_t cejas = leerADC(0);
-                uint16_t angle5 = (cejas * 0.0039) + 9;
-                PWM_setAngle5(angle5);
-                
-                uint16_t cejas2 = leerADC(0);
-                uint16_t angle6 = (cejas2 * -0.0039) + 13;
-                PWM_setAngle6(angle6);
-                break;
-                
-            case MODO_EPROM:
-                // (Se implementará después)
-                break;
-                
-            case MODO_SERIAL:
-                // (Se implementará después)
-                break;
-			}
-        }
-    }
-}
-
-// --- FUNCIONES DE CONFIGURACIÓN ---
-void setup() {
-    // Configuración de botón 
-    DDRD &= ~(1 << PIND2);
-    PORTD |= (1 << PIND2); // Pull-up
-    DDRD &= ~(1 << PIND6);
-    PORTD |= (1 << PIND6);
-    
-    // LEDs para feedback visual
-    DDRB |= (1 << PORTB5);
-}
-
-void initPWM() {
-    // Timer1 (Servos 1 y 2)
-    TCCR1A = (1 << COM1A1) | (1 << COM1B1) | (1 << WGM11);
-    TCCR1B = (1 << WGM13) | (1 << WGM12) | (1 << CS11);
-    ICR1 = 20000;
-    DDRB |= (1 << PORTB1) | (1 << PORTB2);
-    
-    // Timer2 (Servos 3 y 4)
-    TCCR2A = (1 << COM2A1) | (1 << COM2B1) | (1 << WGM21) | (1 << WGM20);
-    TCCR2B = (1 << CS22) | (1 << CS21);
-    DDRB |= (1 << PORTB3);
-    DDRD |= (1 << PORTD3);
-    
-    // Timer0 (Servos 5 y 6)
-    TCCR0A = (1 << COM0A1) | (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);
-    TCCR0B = (1 << CS02) | (1 << CS00);
-    DDRD |= (1 << PORTD5) | (1 << PORTD6);
-}
-
-// --- FUNCIONES DE CAMBIO DE MODO ---
 uint8_t boton_presionado() {
-    if (!(PIND & (1 << PIND2))) {
-        _delay_ms(20);
-        if (!(PIND & (1 << PIND2))) {
-            return 1;
-        }
-    }
-    return 0;
+	if (!(PIND & (1 << PORTD2))) { // Si el botón está presionado (LOW)
+		_delay_ms(20);         // Espera para anti-rebote
+		if (!(PIND & (1 << PORTD2))) { // Verifica nuevamente
+			return 1; // Botón realmente presionado
+		}
+	}
+	return 0; // Botón no presionado
 }
 
 void cambiar_modo() {
-    if (boton_presionado()) {
-        while (!(PIND & (1 << PIND2)));
-        _delay_ms(20);
-        
-        modo_actual = (modo_actual + 1) % 3;
-        
-        // Feedback visual -- LED
-        if(modo_actual == MODO_FISICO) {
-            PORTB |= (1 << PORTB5); // LED encendido = modo físico
-        } else {
-            PORTB &= ~(1 << PORTB5);
-        }
-    }
+	if (boton_presionado()) {
+		// Espera hasta que se suelte el botón
+		while (!(PIND & (1 << PORTD2)));
+		_delay_ms(20); // Anti-rebote al soltar
+		
+		// Cambia al siguiente modo
+		modo_actual = (modo_actual + 1) % 3;
+	}
 }
 
-// Función ADC (igual a tu versión)
-void initADC() {
-    ADMUX = (1 << REFS0);
-    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
+//Interrupciones 
+ISR(USART_RX_vect) {
+	received_char = UDR0; // Leer carácter recibido
+	new_data = 1;
+
+	writeChar(received_char);
 }
 
-uint16_t leerADC(uint8_t canal) {
-    ADMUX = (ADMUX & 0xF0) | (canal & 0x0F);
-    ADCSRA |= (1 << ADSC);
-    while (ADCSRA & (1 << ADSC));
-    return ADC;
+ISR(PCINT2_vect){
+	PORTB |= (1 << PORTB5);
+	
+	if (!(PIND & (1 << PORTD7))){
+		escribir++;
+		if (escribir == 5)
+		{
+			escribir = 0;
+		}
+		
+		
+	}
+
+	
+	
 }
