@@ -5,16 +5,16 @@
  * Author : dulce salguero - 231208
  * Descripción: sistema de ojos mecánicos, 6 servos, 1 joystick, 1 pote, 2 botones - Control de PWM, EEPROM
 * Hardware:
- *  - 6 servos: PWM por Timers 0,1,2
+ *  - 6 servos: PWM por Timers 0,1,2 - D9, D10, D11, D3, D6, D5
  *  - Joystick:  X = A6, Y = A7
  *  - Potenciómetro: A0
  *  - Botón  D2  (cambio de modo)
+ *  - Botón D7 (escritura/lectura)
  *  - LED   D13  (indica el modo actual)
- *
+ *  - LED A1
  */
 
-
-#define F_CPU 16000000
+#define F_CPU 16000000UL 
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
@@ -135,11 +135,51 @@ int main(void)
 			
 			break;
 			case MODO_SERIAL:
+			writeString("\r\nModo SERIAL activado. Listo para comandos.\r\n");
+			mostrarMenu();
+			
+			while (modo_actual == MODO_SERIAL) {
+				if (new_data) {
+					switch (received_char){
+						case '1': // MOVER IZQUIERDA - SERVO6                                               
+							OCR2A = 23;
+							writeString("\r\nGlobo ocular IZQUIERDA\r\n");
+							break; 
+						case '2': // MOVER DERECHA - SERVO6 
+							OCR2A = 9;
+							writeString("\r\nGlobo ocular DERECHA\r\n");
+							break;
+						case '3': // CERRAR PÁRPADO IZQUIERDO - SERVO3 
+							OCR0A = 9;
+							writeString("\r\nCerrando párpado IZQUIERDO\r\n");
+							break; 
+						case '4': // CERRAR PÁRPADO DERECHO - SERVO4
+							OCR0B = 9; 
+							writeString("\r\nCerrando párpado DERECHO\r\n");
+							break; 
+						case '5': // Viendo ABAJO - SSERVO5
+							OCR2B = 13; 
+							writeString("\r\nViendo ABAJO\r\n");
+							break; 
+						default:
+							writeString("\r\nComando no válido. Intente de nuevo.\r\n");
+							break; 
+						
+							
+				
+					}
+					
+					new_data = 0; 
+					mostrarMenu(); 
+				}
+				cambiar_modo(); 
+			}
 			
 			break;
 		}
 	}
 }
+
 //subrutinas
 
 void initADC(){
@@ -244,6 +284,8 @@ void cambiar_modo() {
 		modo_actual = (modo_actual + 1) % 3;
 	}
 }
+
+
 
 //Interrupciones 
 ISR(USART_RX_vect) {

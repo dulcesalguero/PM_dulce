@@ -1,10 +1,12 @@
 /*
  * UART.c
  *
- * Created: 5/19/2025 5:12:05 PM
+ * 
  *  Author: dulce
  */ 
+
 #include "UART.h"
+
 void initUART() {
 	// P1: Configurar PD1 (TX) como salida y PD0 (RX) como entrada
 	DDRD |= (1 << DDD1); // TX (Salida)
@@ -34,4 +36,17 @@ void writeString(char*texto){
 		writeChar(*(texto+i));
 	}
 	
+}
+
+void mostrarMenu() {
+	writeString("\r\n--- MENU DE COMANDOS ---\r\n");
+	writeString("1:Mover globo ocular ARRIBA\r\n");
+	writeString("2:Mover globo ocular ABAJO\r\n");
+	writeString("3:Mirar IZQUIERDA\r\n");
+	writeString("4:Mirar DERECHA\r\n");
+	writeString("5:ABRIR parpados\r\n");
+	writeString("6:CERRAR parpados\r\n");
+	writeString("R:RESET (Posicion inicial)\r\n");
+	writeString("-----------------------\r\n");
+	writeString("Ingrese comando: ");
 }
