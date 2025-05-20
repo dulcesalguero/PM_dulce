@@ -39,14 +39,12 @@ void writeString(char*texto){
 }
 
 void mostrarMenu() {
-	writeString("\r\n--- MENU DE COMANDOS ---\r\n");
-	writeString("1:Mover globo ocular ARRIBA\r\n");
-	writeString("2:Mover globo ocular ABAJO\r\n");
-	writeString("3:Mirar IZQUIERDA\r\n");
-	writeString("4:Mirar DERECHA\r\n");
-	writeString("5:ABRIR parpados\r\n");
-	writeString("6:CERRAR parpados\r\n");
-	writeString("R:RESET (Posicion inicial)\r\n");
+	writeString("\r\n--- MENU DE COMANDOS :) ---\r\n");
+	writeString("1:Globo ocular DERECHA\r\n");
+	writeString("2:Globo ocular IZQUIERDA\r\n");
+	writeString("3:Guiño IZQUIERDO\r\n");
+	writeString("4:Guiño DERECHO\r\n");
+	writeString("5:Viendo ABAJO\r\n");
 	writeString("-----------------------\r\n");
 	writeString("Ingrese comando: ");
 }
